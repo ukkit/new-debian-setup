@@ -1,4 +1,4 @@
-# NEW Install
+# New Install
 
 ## Install sudo and add user to it
 
@@ -13,9 +13,9 @@ usermod -aG sudo your_username
 
 ```bash
 sudo apt install -y git curl htop glances ncdu
-```bash
+```
 
-# Installing ohmyzsh
+# ohmyzsh
 
 ```bash
 sudo apt-get install zsh
@@ -24,6 +24,7 @@ sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.
 ```
 
 ### Edit .zshrc
+
 ```bash
 nano ~/.zshrc
 ```
@@ -35,6 +36,7 @@ ZSH_THEME="bira"
 ```
 
 ### Add following text at the end
+
 ```text
 #CUSTOM ALIAS
 alias cls=clear
@@ -54,9 +56,9 @@ alias dsp='docker system prune'
 export PATH="/sbin:/usr/sbin:$PATH"
 ```
 
-### reboot the system
+reboot the system
 
-# BUILDING PYTHON
+# PYTHON 3.12
 
 ## 1. Install build dependencies
 
@@ -68,6 +70,7 @@ sudo apt install -y wget build-essential zlib1g-dev libncurses5-dev \
 ```
 
 ## 2. Download the latest Python source
+
 ```bash
 cd /usr/src
 sudo wget https://www.python.org/ftp/python/3.12.3/Python-3.12.3.tgz
@@ -76,23 +79,36 @@ cd Python-3.12.3
 ```
 
 ## 3. Build Python (without messing with system python)
+
 ```bash
 sudo ./configure --enable-optimizations --with-ensurepip=install
-sudo make -j$(nproc)
-sudo make altinstall  # Important: Use altinstall, not install
 ```
 
-## ZRAM
+```bash
+sudo make -j$(nproc)
+```
 
-### Install zram
+```bash
+sudo make altinstall
+```
+
+# ZRAM
+
+## Install zram
+
 ```bash
 sudo apt update
-sudo apt install zram-tools
+sudo apt install -y zram-tools
+```
 
+## Edit config
+
+```bash
 sudo nano /etc/default/zramswap
 ```
 
-### Example settings (you can leave it as is)
+## Example settings (you can leave it as is)
+
 ```text
 # How much RAM percentage should be used
 PERCENT=50
@@ -105,13 +121,51 @@ ALGO=lz4
 
 ```
 
-### Enable and start zram
+## Enable and start zram
+
 ```bash
 sudo systemctl enable --now zramswap
 ```
 
-### Verify ZRAM is active
+## Verify ZRAM is active
+
 ```bash
 swapon --show
 ```
 
+# Add SSH Key to GitHub from Debian
+
+##  Generate a new SSH key
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+## Start the ssh-agent and add your key
+
+```bash
+# Start the agent in the background & Add your key to the agent
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+## Copy the public key
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+## Add key to GitHub
+
+ - Log in to: https://github.com
+- Go to: Settings → SSH and GPG keys
+- Click: New SSH key
+  - Title: e.g. Debian Optiplex
+  - Key: paste the contents of id_ed25519.pub
+- Click Add SSH Key.
+
+## Test the connection
+
+```bash
+ssh -T git@github.com
+```
