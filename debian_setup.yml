@@ -1,0 +1,414 @@
+---
+- name: Complete Debian System Setup
+  hosts: debian_servers
+  become: yes
+  vars:
+    target_user: "{{ ansible_user }}"
+    python_version: "3.12.3"
+    github_email: "neeraj.tikku@gmail.com"  # Change this to your email
+    zram_percent: 50
+    zram_algorithm: "lz4"
+    oh_my_zsh_theme: "bira"
+
+  tasks:
+    # SUDO SETUP AND BASIC PACKAGES
+    - name: Install sudo package
+      apt:
+        name: sudo
+        state: present
+        update_cache: yes
+
+    - name: Add user to sudo group
+      user:
+        name: "{{ target_user }}"
+        groups: sudo
+        append: yes
+
+    - name: Install essential packages
+      apt:
+        name:
+          - git
+          - curl
+          - htop
+          - glances
+          - ncdu
+          - zsh
+          - wget
+        state: present
+        update_cache: yes
+
+    # ZSH AND OH-MY-ZSH SETUP
+    - name: Change user shell to zsh
+      user:
+        name: "{{ target_user }}"
+        shell: /usr/bin/zsh
+
+    - name: Check if oh-my-zsh is already installed
+      stat:
+        path: "/home/{{ target_user }}/.oh-my-zsh"
+      register: ohmyzsh_stat
+      become_user: "{{ target_user }}"
+
+    - name: Install oh-my-zsh
+      shell: sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+      become_user: "{{ target_user }}"
+      when: not ohmyzsh_stat.stat.exists
+
+    - name: Configure .zshrc
+      blockinfile:
+        path: "/home/{{ target_user }}/.zshrc"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+        block: |
+          ZSH_THEME="{{ oh_my_zsh_theme }}"
+
+          #CUSTOM ALIAS
+          alias cls=clear
+          alias ls='ls -al'
+
+          alias up.up='sudo apt update && sudo apt upgrade -y'
+          alias python=python3.12
+          alias pyt=python3.12
+          alias py=python3.12
+          alias py3=python3.12
+
+          alias dcupdb='docker compose up -d --build'
+          alias dcdown='docker compose down'
+          alias dcrun='docker compose run --rm'
+          alias dsp='docker system prune'
+
+          export PATH="/sbin:/usr/sbin:$PATH"
+        backup: yes
+      become_user: "{{ target_user }}"
+
+    # PYTHON 3.12 INSTALLATION
+    - name: Install Python build dependencies
+      apt:
+        name:
+          - build-essential
+          - zlib1g-dev
+          - libncurses5-dev
+          - libgdbm-dev
+          - libnss3-dev
+          - libssl-dev
+          - libreadline-dev
+          - libffi-dev
+          - libsqlite3-dev
+          - libbz2-dev
+          - liblzma-dev
+          - tk-dev
+          - uuid-dev
+        state: present
+
+    - name: Create /usr/src directory
+      file:
+        path: /usr/src
+        state: directory
+        mode: '0755'
+
+    - name: Check if Python {{ python_version }} source already exists
+      stat:
+        path: "/usr/src/Python-{{ python_version }}"
+      register: python_source_stat
+
+    - name: Download Python {{ python_version }} source
+      get_url:
+        url: "https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz"
+        dest: "/usr/src/Python-{{ python_version }}.tgz"
+        mode: '0644'
+      when: not python_source_stat.stat.exists
+
+    - name: Extract Python source
+      unarchive:
+        src: "/usr/src/Python-{{ python_version }}.tgz"
+        dest: /usr/src
+        remote_src: yes
+        creates: "/usr/src/Python-{{ python_version }}"
+
+    - name: Check if Python {{ python_version }} is already installed
+      command: python3.12 --version
+      register: python_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Configure Python build
+      command: ./configure --enable-optimizations --with-ensurepip=install
+      args:
+        chdir: "/usr/src/Python-{{ python_version }}"
+        creates: "/usr/src/Python-{{ python_version }}/Makefile"
+      when: python_installed.rc != 0
+
+    - name: Build Python (this may take a while)
+      command: make -j{{ ansible_processor_vcpus }}
+      args:
+        chdir: "/usr/src/Python-{{ python_version }}"
+      when: python_installed.rc != 0
+
+    - name: Install Python {{ python_version }}
+      command: make altinstall
+      args:
+        chdir: "/usr/src/Python-{{ python_version }}"
+      when: python_installed.rc != 0
+
+    # ZRAM SETUP
+    - name: Install zram-tools
+      apt:
+        name: zram-tools
+        state: present
+
+    - name: Configure zramswap
+      lineinfile:
+        path: /etc/default/zramswap
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: yes
+      loop:
+        - { regexp: '^PERCENT=', line: 'PERCENT={{ zram_percent }}' }
+        - { regexp: '^ZRAM_DEVICES=', line: 'ZRAM_DEVICES=1' }
+        - { regexp: '^ALGO=', line: 'ALGO={{ zram_algorithm }}' }
+
+    - name: Enable and start zramswap service
+      systemd:
+        name: zramswap
+        enabled: yes
+        state: started
+
+    # SSH KEY GENERATION FOR GITHUB
+    - name: Check if SSH key already exists
+      stat:
+        path: "/home/{{ target_user }}/.ssh/id_ed25519"
+      register: ssh_key_stat
+      become_user: "{{ target_user }}"
+
+    - name: Create .ssh directory if it doesn't exist
+      file:
+        path: "/home/{{ target_user }}/.ssh"
+        state: directory
+        mode: '0700'
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+      become_user: "{{ target_user }}"
+
+    - name: Generate SSH key for GitHub
+      openssh_keypair:
+        path: "/home/{{ target_user }}/.ssh/id_ed25519"
+        type: ed25519
+        comment: "{{ github_email }}"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0600'
+      become_user: "{{ target_user }}"
+      when: not ssh_key_stat.stat.exists
+
+    - name: Set SSH private key permissions
+      file:
+        path: "/home/{{ target_user }}/.ssh/id_ed25519"
+        mode: '0600'
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+
+    - name: Set SSH public key permissions
+      file:
+        path: "/home/{{ target_user }}/.ssh/id_ed25519.pub"
+        mode: '0644'
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+
+    # DOCKER INSTALLATION
+    - name: Install Docker dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker CE
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ target_user }}"
+        groups: docker
+        append: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    # OLLAMA INSTALLATION
+    - name: Download Ollama installation script
+      get_url:
+        url: https://ollama.ai/install.sh
+        dest: /tmp/ollama_install.sh
+        mode: '0755'
+
+    - name: Check if Ollama is already installed
+      command: which ollama
+      register: ollama_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Install Ollama
+      shell: /tmp/ollama_install.sh
+      when: ollama_installed.rc != 0
+
+    - name: Start and enable Ollama service
+      systemd:
+        name: ollama
+        state: started
+        enabled: yes
+
+    - name: Check if models.txt exists on control machine
+      local_action:
+        module: stat
+        path: "{{ playbook_dir }}/models.txt"
+      register: models_file_stat
+      become: no
+
+    - name: Copy models.txt to target machine
+      copy:
+        src: "{{ playbook_dir }}/models.txt"
+        dest: "/tmp/models.txt"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: '0644'
+      when: models_file_stat.stat.exists
+
+    - name: Read models from models.txt
+      slurp:
+        src: /tmp/models.txt
+      register: models_content
+      when: models_file_stat.stat.exists
+
+    - name: Download Ollama models
+      shell: "ollama pull {{ item }}"
+      loop: "{{ (models_content.content | b64decode).strip().split('\n') | select('match', '^[^#].*') | list }}"
+      become_user: "{{ target_user }}"
+      when:
+        - models_file_stat.stat.exists
+        - item | trim | length > 0
+      register: model_downloads
+      failed_when: false
+
+    - name: Display model download results
+      debug:
+        msg: "Model {{ item.item }}: {{ 'Downloaded successfully' if item.rc == 0 else 'Failed to download' }}"
+      loop: "{{ model_downloads.results | default([]) }}"
+      when: models_file_stat.stat.exists
+
+    # CLEANUP
+    - name: Clean up Python source archive
+      file:
+        path: "/usr/src/Python-{{ python_version }}.tgz"
+        state: absent
+
+    - name: Clean up Ollama install script
+      file:
+        path: /tmp/ollama_install.sh
+        state: absent
+
+    - name: Clean up models.txt
+      file:
+        path: /tmp/models.txt
+        state: absent
+
+  handlers:
+    - name: reboot system
+      reboot:
+        reboot_timeout: 600
+
+  post_tasks:
+    - name: Display SSH public key for GitHub
+      slurp:
+        src: "/home/{{ target_user }}/.ssh/id_ed25519.pub"
+      register: ssh_public_key
+      become_user: "{{ target_user }}"
+
+    - name: Show SSH public key
+      debug:
+        msg: |
+          ========================================
+          SSH Public Key for GitHub:
+          {{ ssh_public_key.content | b64decode }}
+
+          Next steps:
+          1. Copy the above SSH key
+          2. Go to https://github.com/settings/ssh
+          3. Click "New SSH key"
+          4. Paste the key and save
+          5. Test with: ssh -T git@github.com
+          ========================================
+
+    - name: Verify ZRAM status
+      command: swapon --show
+      register: zram_status
+      changed_when: false
+
+    - name: Display ZRAM status
+      debug:
+        var: zram_status.stdout_lines
+
+    - name: Display Python version
+      command: python3.12 --version
+      register: python_version_output
+      changed_when: false
+
+    - name: Show Python installation
+      debug:
+        msg: "Python installation: {{ python_version_output.stdout }}"
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version_output
+      changed_when: false
+      become_user: "{{ target_user }}"
+
+    - name: Show Docker installation
+      debug:
+        msg: "Docker installation: {{ docker_version_output.stdout }}"
+
+    - name: Verify Ollama installation
+      command: ollama --version
+      register: ollama_version_output
+      changed_when: false
+      become_user: "{{ target_user }}"
+
+    - name: Show Ollama installation
+      debug:
+        msg: "Ollama installation: {{ ollama_version_output.stdout }}"
+
+    - name: List downloaded Ollama models
+      command: ollama list
+      register: ollama_models_list
+      changed_when: false
+      become_user: "{{ target_user }}"
+      failed_when: false
+
+    - name: Show downloaded models
+      debug:
+        msg: |
+          Downloaded Ollama models:
+          {{ ollama_models_list.stdout }}
+      when: ollama_models_list.rc == 0

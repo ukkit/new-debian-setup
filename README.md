@@ -169,3 +169,87 @@ cat ~/.ssh/id_ed25519.pub
 ```bash
 ssh -T git@github.com
 ```
+
+# Install Docker
+
+## Set up Docker's apt repository.
+
+```bash
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+```
+
+## Install latest Docker packages
+
+```bash
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+```
+
+### Post Install steps
+
+```bash
+sudo groupadd docker
+sudo usermod -aG docker $USER
+```
+
+Logout and login into the box
+
+```bash
+docker run hello-world
+```
+
+# Install Ollama
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+## Optimize Ollama Configuration (for old PC running linux)
+
+Create systemd service with optimizations:
+
+```bash
+sudo nano /etc/systemd/system/ollama.service
+```
+
+Add this configuration:
+
+```ini
+[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="OLLAMA_HOST=0.0.0.0"
+Environment="OLLAMA_NUM_PARALLEL=1"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+Environment="OLLAMA_FLASH_ATTENTION=0"
+Environment="OLLAMA_KEEP_ALIVE=5m"
+Environment="OLLAMA_MAX_QUEUE=1"
+
+[Install]
+WantedBy=default.target
+```
+
+Then reload and restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
