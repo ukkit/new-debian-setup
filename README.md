@@ -1,20 +1,5 @@
 # New Install
 
-## Install sudo and add user to it
-
-```bash
-su -
-<enter password here>
-apt install -y sudo
-usermod -aG sudo your_username
-```
-
-## then reboot
-
-```bash
-sudo apt install -y git curl htop glances ncdu
-```
-
 # ohmyzsh
 
 ```bash
@@ -27,6 +12,12 @@ sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.
 
 ```bash
 nano ~/.zshrc
+```
+
+# install UV
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### Change theme:
@@ -43,10 +34,6 @@ alias cls=clear
 alias ls='ls -al'
 
 alias up.up='sudo apt update && sudo apt upgrade -y'
-alias python=python3.12
-alias pyt=python3.12
-alias py=python3.12
-alias py3=python3.12
 
 alias dcupdb='docker compose up -d --build'
 alias dcdown='docker compose down'
@@ -56,41 +43,7 @@ alias dsp='docker system prune'
 export PATH="/sbin:/usr/sbin:$PATH"
 ```
 
-reboot the system
 
-# PYTHON 3.12
-
-## 1. Install build dependencies
-
-```bash
-sudo apt update
-sudo apt install -y wget build-essential zlib1g-dev libncurses5-dev \
-  libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev \
-  libsqlite3-dev libbz2-dev liblzma-dev tk-dev uuid-dev
-```
-
-## 2. Download the latest Python source
-
-```bash
-cd /usr/src
-sudo wget https://www.python.org/ftp/python/3.12.3/Python-3.12.3.tgz
-sudo tar -xf Python-3.12.3.tgz
-cd Python-3.12.3
-```
-
-## 3. Build Python (without messing with system python)
-
-```bash
-sudo ./configure --enable-optimizations --with-ensurepip=install
-```
-
-```bash
-sudo make -j$(nproc)
-```
-
-```bash
-sudo make altinstall
-```
 
 # ZRAM
 
@@ -172,84 +125,81 @@ ssh -T git@github.com
 
 # Install Docker
 
-## Set up Docker's apt repository.
+## Step 1 — Update Debian
+
+Inside the LXC:
 
 ```bash
-# Add Docker's official GPG key:
-sudo apt-get update
-sudo apt-get install ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
+apt update && apt upgrade -y
+apt install -y ca-certificates curl gnupg lsb-release
+```
 
-# Add the repository to Apt sources:
+---
+
+## Step 2 — Add Docker official repository
+
+```bash
+mkdir -p /etc/apt/keyrings
+
+curl -fsSL https://download.docker.com/linux/debian/gpg \
+  | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+chmod a+r /etc/apt/keyrings/docker.gpg
+```
+
+Add repo:
+
+```bash
 echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+  > /etc/apt/sources.list.d/docker.list
 ```
 
-## Install latest Docker packages
+---
+
+## Step 3 — Install Docker Engine + Compose plugin
 
 ```bash
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+apt update
+
+apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
 ```
 
-### Post Install steps
+---
+
+## Step 4 — Start & enable Docker
 
 ```bash
-sudo groupadd docker
-sudo usermod -aG docker $USER
+systemctl enable docker
+systemctl start docker
 ```
 
-Logout and login into the box
+Verify:
+
+```bash
+docker --version
+docker compose version
+```
+
+---
+
+## Step 5 — Run without sudo (optional)
+
+```bash
+usermod -aG docker $USER
+newgrp docker
+```
+
+---
+
+## Step 6 — Test
 
 ```bash
 docker run hello-world
 ```
 
-# Install Ollama
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-## Optimize Ollama Configuration (for old PC running linux)
-
-Create systemd service with optimizations:
-
-```bash
-sudo nano /etc/systemd/system/ollama.service
-```
-
-Add this configuration:
-
-```ini
-[Unit]
-Description=Ollama Service
-After=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/ollama serve
-User=ollama
-Group=ollama
-Restart=always
-RestartSec=3
-Environment="OLLAMA_HOST=0.0.0.0"
-Environment="OLLAMA_NUM_PARALLEL=1"
-Environment="OLLAMA_MAX_LOADED_MODELS=1"
-Environment="OLLAMA_FLASH_ATTENTION=0"
-Environment="OLLAMA_KEEP_ALIVE=5m"
-Environment="OLLAMA_MAX_QUEUE=1"
-
-[Install]
-WantedBy=default.target
-```
-
-Then reload and restart:
-
-```bash
-sudo systemctl daemon-reload
 sudo systemctl restart ollama
 ```
