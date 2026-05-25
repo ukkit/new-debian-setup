@@ -4,86 +4,94 @@
 
 ```bash
 sudo apt-get install zsh
+sudo apt-get install git
 sudo chsh -s $(which zsh)
 sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 ```
-
-### Edit .zshrc
-
-```bash
-nano ~/.zshrc
-```
-
 # install UV
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Change theme:
+### Replace .zshrc with following
 
-```text
+```bash
+# =============================================================
+# PATH
+# =============================================================
+export PATH="/sbin:/usr/sbin:$HOME/.local/bin:$PATH"
+
+# =============================================================
+# Oh My Zsh (keep, but trim it)
+# =============================================================
+export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="bira"
-```
 
-### Add following text at the end
+# Disable git status in prompt for large repos (speeds up prompt a lot)
+DISABLE_UNTRACKED_FILES_DIRTY="true"
 
-```text
-#CUSTOM ALIAS
-alias cls=clear
-alias ls='ls -al'
+plugins=(git docker docker-compose)
+source $ZSH/oh-my-zsh.sh
 
-alias up.up='sudo apt update && sudo apt upgrade -y'
+# =============================================================
+# HISTORY  (big upgrade — OMZ defaults are weak)
+# =============================================================
+HISTSIZE=50000
+SAVEHIST=50000
+HISTFILE="$HOME/.zsh_history"
+setopt HIST_IGNORE_ALL_DUPS   # no duplicate entries
+setopt HIST_IGNORE_SPACE      # commands prefixed with space won't be saved
+setopt SHARE_HISTORY          # share history across all open terminals
+setopt HIST_REDUCE_BLANKS     # trim blanks
 
-alias dcupdb='docker compose up -d --build'
+# =============================================================
+# NAVIGATION & SHELL BEHAVIOR
+# =============================================================
+setopt AUTO_CD                # type a dir name to cd into it
+setopt CORRECT                # suggest corrections for typos
+setopt NO_CASE_GLOB           # case-insensitive globbing
+
+# =============================================================
+# ALIASES
+# =============================================================
+alias cls='clear'
+alias ls='ls -alh --color=auto'   # -h = human-readable sizes
+alias ..='cd ..'
+alias ...='cd ../..'
+
+alias up='sudo apt update && sudo apt upgrade -y'
+
+# Docker Compose
+alias dcup='docker compose up -d --build'
 alias dcdown='docker compose down'
 alias dcrun='docker compose run --rm'
-alias dsp='docker system prune'
+alias dclogs='docker compose logs -f'
+alias dsp='docker system prune -f'
 
-export PATH="/sbin:/usr/sbin:$PATH"
-```
+# =============================================================
+# FUNCTIONS
+# =============================================================
 
+# mkcd: make a directory and immediately cd into it
+mkcd() { mkdir -p "$1" && cd "$1"; }
 
+# extract: one command to extract any archive type
+extract() {
+  case "$1" in
+    *.tar.gz|*.tgz)  tar xzf "$1" ;;
+    *.tar.bz2)        tar xjf "$1" ;;
+    *.zip)            unzip "$1"   ;;
+    *.gz)             gunzip "$1"  ;;
+    *.rar)            unrar x "$1" ;;
+    *)  echo "'$1' cannot be extracted via extract()" ;;
+  esac
+}
 
-# ZRAM
-
-## Install zram
-
-```bash
-sudo apt update
-sudo apt install -y zram-tools
-```
-
-## Edit config
-
-```bash
-sudo nano /etc/default/zramswap
-```
-
-## Example settings (you can leave it as is)
-
-```text
-# How much RAM percentage should be used
-PERCENT=50
-
-# Max number of zram devices (usually = number of cores)
-ZRAM_DEVICES=1
-
-# Set algorithm (lz4 is faster, zstd compresses better)
-ALGO=lz4
-
-```
-
-## Enable and start zram
-
-```bash
-sudo systemctl enable --now zramswap
-```
-
-## Verify ZRAM is active
-
-```bash
-swapon --show
+# =============================================================
+# ENV (keep at the bottom)
+# =============================================================
+. "$HOME/.local/bin/env"
 ```
 
 # Add SSH Key to GitHub from Debian
@@ -91,7 +99,7 @@ swapon --show
 ##  Generate a new SSH key
 
 ```bash
-ssh-keygen -t ed25519 -C "your_email@example.com"
+ssh-keygen -t ed25519 -C "$(whoami)@$(hostname)"
 ```
 
 ## Start the ssh-agent and add your key
@@ -199,7 +207,4 @@ newgrp docker
 
 ```bash
 docker run hello-world
-```
-
-sudo systemctl restart ollama
 ```
